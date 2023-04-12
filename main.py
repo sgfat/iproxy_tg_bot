@@ -89,7 +89,11 @@ def parse_status(data: List[Dict]) -> List:
     logger.debug('Checking status of devices')
     devices = []
     for item in data:
-        if not item['online']:
+        online = item.get('online', None)
+        if online is None:
+            logger.error(f'No key "online" in item: {item["name"]}')
+            continue
+        if not online:
             logger.info('Девайс оффлайн')
             devices.append(item['name'])
     return devices
