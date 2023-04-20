@@ -49,7 +49,7 @@ def check_tokens():
         if token_value is None:
             logger.critical(f"Can't find token:{token}")
             return False
-    logger.debug('Проверка токенов завершена')
+    logger.debug('All tokens OK')
     return True
 
 
@@ -64,7 +64,8 @@ def send_message(bot, message):
 
 
 def get_api_answer():
-    """Making request to API."""
+    """Sending request to API."""
+    logger.debug('Sending request to API')
     requests_params = {'url': ENDPOINT, 'headers': HEADERS}
     try:
         response = requests.get(**requests_params)
@@ -93,7 +94,6 @@ def check_response(response: Dict[str, List]) -> List:
         raise TypeError('Response["result"] is not List type.')
     if not response['result']:
         raise ValueError('Response["result"] is empty.')
-    logger.debug('Checking response completed')
     return response['result']
 
 
@@ -125,11 +125,10 @@ def main():
     """Start bot."""
     if not check_tokens():
         sys.exit("Program interrupted! Can't find tokens.")
-    logger.debug('Starting bot')
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
     last_ips = {}
+    logger.debug('Bot started')
     while True:
-        logger.debug('Bot started')
         try:
             #  get response from API
             response = get_api_answer()
@@ -160,6 +159,7 @@ def main():
             message = f'Error in program: {error}'
             send_message(bot, message)
         finally:
+            logger.debug('Sleeping')
             time.sleep(RETRY_PERIOD)
 
 
