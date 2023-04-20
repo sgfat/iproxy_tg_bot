@@ -37,17 +37,30 @@ logger.addHandler(fileHandler)
 logger.addHandler(streamHandler)
 
 
+def check_tokens():
+    """Checking main tokens."""
+    logger.debug('Checking tokens')
+    tokens = {
+        'TELEGRAM_TOKEN': TELEGRAM_TOKEN,
+        'IPROXY_TOKEN': IPROXY_TOKEN,
+        'TELEGRAM_CHAT_ID': TELEGRAM_CHAT_ID,
+    }
+    for token, token_value in tokens.items():
+        if token_value is None:
+            logger.critical(f"Can't find token:{token}")
+            return False
+    logger.debug('Проверка токенов завершена')
+    return True
+
+
 def send_message(bot, message):
     """Send message to Telegram."""
     try:
-        bot.send_message(
-            chat_id=TELEGRAM_CHAT_ID,
-            text=message
-        )
-        logger.debug(f'Bot send message: "{message}"')
+        bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
     except Exception as error:
-        logger.error(f'Send message failure: "{message}"')
         raise BotSendMessageError(f'Send message failure: {error}')
+    else:
+        logger.debug(f'Bot send message: "{message}"')
 
 
 def get_api_answer():
@@ -85,8 +98,8 @@ def check_response(response: Dict[str, List]) -> List:
 
 
 def parse_status(data: List[Dict]) -> List:
-    """Parsing online keys in response."""
-    logger.debug('Checking status of devices')
+    """Parsing online keys from response."""
+    logger.debug('Parsing status of devices')
     devices = []
     for item in data:
         online = item.get('online', None)
@@ -99,20 +112,13 @@ def parse_status(data: List[Dict]) -> List:
     return devices
 
 
-def check_tokens():
-    """Checking main tokens."""
-    logger.debug('Checking tokens')
-    tokens = {
-        'TELEGRAM_TOKEN': TELEGRAM_TOKEN,
-        'IPROXY_TOKEN': IPROXY_TOKEN,
-        'TELEGRAM_CHAT_ID': TELEGRAM_CHAT_ID,
-    }
-    for token, token_value in tokens.items():
-        if token_value is None:
-            logger.critical(f"Can't find token:{token}")
-            return False
-    logger.debug('Проверка токенов завершена')
-    return True
+def parse_ips(data: List[Dict]) -> Dict:
+    """Parsing ips from response."""
+    logger.debug('Parsing ips')
+    current_ips = {}
+    for item in data:
+        current_ips[item['id']] = item['externalIp']
+    return current_ips
 
 
 def main():
@@ -121,16 +127,32 @@ def main():
         sys.exit("Program interrupted! Can't find tokens.")
     logger.debug('Starting bot')
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
+    last_ips = {}
     while True:
         logger.debug('Bot started')
         try:
+            #  get response from API
             response = get_api_answer()
             data = check_response(response)
+
+            #  check if devices offline
             statuses = parse_status(data)
             if statuses:
                 send_message(bot, f'Offline devices: {statuses}')
             else:
                 logger.debug('All devices online')
+
+            #  check if ip not changed
+            current_ips = parse_ips(data)
+            for device_id in current_ips:
+                if last_ips.get(device_id, device_id) == current_ips[device_id]:
+                    send_message(bot, f'IP not changed on device: {device_id}')
+                    logger.debug('IP not changed: {c_id}')
+                else:
+                    last_ips[device_id] = current_ips[device_id]
+            else:
+                logger.debug('IPs checked')
+
         except BotSendMessageError as error:
             logger.debug(f'Send message failure: {error}')
         except Exception as error:
