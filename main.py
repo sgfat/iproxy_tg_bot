@@ -133,20 +133,19 @@ def main():
     logger.debug('Bot started')
     while True:
         try:
-            #  get response from API
             response = get_api_answer()
             data = check_response(response)
 
-            #  check if devices offline
             statuses = parse_status(data)
             if statuses:
                 send_message(bot, f'Offline devices: {statuses}')
             else:
                 logger.debug('All devices online')
 
-            #  check if ip not changed
             current_ips = parse_ips(data)
             for device_id in current_ips:
+                if current_ips[device_id] is None:
+                    continue
                 if last_ips.get(device_id, device_id) == current_ips[device_id]:
                     send_message(bot, f'IP not changed on device: {device_id}')
                     logger.debug('IP not changed: {c_id}')
