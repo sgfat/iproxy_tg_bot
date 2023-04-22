@@ -117,7 +117,10 @@ def parse_ips(data: List[Dict]) -> Dict:
     logger.debug('Parsing ips')
     current_ips = {}
     for item in data:
-        current_ips[item['id']] = item['externalIp']
+        current_ips[item['id']] = item.get('externalIp', None)
+        if current_ips[item['id']] is None:
+            logger.error(f'No key "externalIp" in item: {item["name"]}')
+            continue
     return current_ips
 
 
