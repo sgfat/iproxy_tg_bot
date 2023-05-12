@@ -153,10 +153,10 @@ async def main():
                 for device_id in current_ips:
                     if current_ips[device_id] is None:
                         continue
-                    if last_ips.get(device_id, device_id) == current_ips[
-                        device_id]:
-                        await send_message(bot,
-                                           f'IP not changed on device: {device_id}')
+                    if last_ips.get(
+                            device_id, device_id) == current_ips[device_id]:
+                        await send_message(
+                            bot, f'IP not changed on device: {device_id}')
                         logger.debug('IP not changed: {c_id}')
                     else:
                         last_ips[device_id] = current_ips[device_id]
