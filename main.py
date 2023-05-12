@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 import sys
@@ -8,6 +9,7 @@ from typing import Dict, List
 
 import requests
 import telegram
+import telegram.error
 from dotenv import load_dotenv
 
 from exceptions import NoAPIAnswerError, BotSendMessageError
@@ -53,11 +55,15 @@ def check_tokens():
     return True
 
 
-def send_message(bot, message):
+async def send_message(bot, message, silent=False):
     """Send message to Telegram."""
     try:
-        bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
-    except Exception as error:
+        if silent:
+            await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message,
+                                   disable_notification=True)
+        else:
+            await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
+    except telegram.error.TelegramError as error:
         raise BotSendMessageError(f'Send message failure: {error}')
     else:
         logger.debug(f'Bot send message: "{message}"')
@@ -107,7 +113,7 @@ def parse_status(data: List[Dict]) -> List:
             logger.error(f'No key "online" in item: {item["name"]}')
             continue
         if not online:
-            logger.info('Девайс оффлайн')
+            logger.info('Device offline')
             devices.append(item['name'])
     return devices
 
@@ -124,46 +130,50 @@ def parse_ips(data: List[Dict]) -> Dict:
     return current_ips
 
 
-def main():
+async def main():
     """Start bot."""
     if not check_tokens():
         sys.exit("Program interrupted! Can't find tokens.")
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
     last_ips = {}
     logger.debug('Bot started')
-    while True:
-        try:
-            response = get_api_answer()
-            data = check_response(response)
+    async with bot:
+        while True:
+            try:
+                response = get_api_answer()
+                data = check_response(response)
 
-            statuses = parse_status(data)
-            if statuses:
-                send_message(bot, f'Offline devices: {statuses}')
-            else:
-                logger.debug('All devices online')
-
-            current_ips = parse_ips(data)
-            for device_id in current_ips:
-                if current_ips[device_id] is None:
-                    continue
-                if last_ips.get(device_id, device_id) == current_ips[device_id]:
-                    send_message(bot, f'IP not changed on device: {device_id}')
-                    logger.debug('IP not changed: {c_id}')
+                statuses = parse_status(data)
+                if statuses:
+                    await send_message(bot, f'Offline devices: {statuses}')
                 else:
-                    last_ips[device_id] = current_ips[device_id]
-            else:
-                logger.debug('IPs checked')
+                    logger.debug('All devices online')
 
-        except BotSendMessageError as error:
-            logger.debug(f'Send message failure: {error}')
-        except Exception as error:
-            logger.error(error)
-            message = f'Error in program: {error}'
-            send_message(bot, message)
-        finally:
-            logger.debug('Sleeping')
-            time.sleep(RETRY_PERIOD)
+                current_ips = parse_ips(data)
+                for device_id in current_ips:
+                    if current_ips[device_id] is None:
+                        continue
+                    if last_ips.get(device_id, device_id) == current_ips[
+                        device_id]:
+                        await send_message(bot,
+                                           f'IP not changed on device: {device_id}')
+                        logger.debug('IP not changed: {c_id}')
+                    else:
+                        last_ips[device_id] = current_ips[device_id]
+                else:
+                    logger.debug('IPs checked')
+
+            except BotSendMessageError as error:
+                logger.debug(f'Send message failure: {error}')
+            except Exception as error:
+                logger.error(error)
+                message = f'Error in program: {error}'
+                await send_message(bot, message)
+            finally:
+                await send_message(bot, 'Sleeping', silent=True)
+                logger.debug('Sleeping')
+                time.sleep(RETRY_PERIOD)
 
 
 if __name__ == '__main__':
-    main()
+    asyncio.run(main())
