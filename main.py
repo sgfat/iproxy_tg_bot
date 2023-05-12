@@ -29,14 +29,11 @@ logger.setLevel(logging.DEBUG)
 fileHandler = RotatingFileHandler(
     'main.log', maxBytes=50000000, backupCount=5
 )
-streamHandler = logging.StreamHandler(sys.stdout)
 formatter = logging.Formatter(
     '%(asctime)s, %(levelname)s, %(lineno)d, %(message)s, %(name)s'
 )
 fileHandler.setFormatter(formatter)
-streamHandler.setFormatter(formatter)
 logger.addHandler(fileHandler)
-logger.addHandler(streamHandler)
 
 
 def check_tokens():
@@ -170,7 +167,7 @@ async def main():
                 message = f'Error in program: {error}'
                 await send_message(bot, message)
             finally:
-                await send_message(bot, 'Sleeping', silent=True)
+                await send_message(bot, 'All checked', silent=True)
                 logger.debug('Sleeping')
                 time.sleep(RETRY_PERIOD)
 
