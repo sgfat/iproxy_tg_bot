@@ -1,0 +1,32 @@
+name: Auto Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install SSH client
+        run: sudo apt-get install openssh-client
+
+      - name: SSH Deploy
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          password: ${{ secrets.PASSWORD }}
+          port: ${{ secrets.PORT }}
+          script: |
+            cd ${{ secrets.PATH }}
+            pkill -f "python main.py"
+            git pull
+            source /botenv/bin/activate
+            pip3 install -r requirements.txt --no-cache-dir
+            nohup python main.py &
