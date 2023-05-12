@@ -27,7 +27,7 @@ HEADERS = {'Authorization': f'{IPROXY_TOKEN}'}
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 fileHandler = RotatingFileHandler(
-    'main.log', maxBytes=50000000, backupCount=5
+    'main.log', maxBytes=5000000, backupCount=5
 )
 formatter = logging.Formatter(
     '%(asctime)s, %(levelname)s, %(lineno)d, %(message)s, %(name)s'

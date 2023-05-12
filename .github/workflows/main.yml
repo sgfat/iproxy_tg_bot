@@ -26,8 +26,8 @@ jobs:
           port: ${{ secrets.PORT }}
           script: |
             cd ${{ secrets.PATH }}
-            pkill -f main.py
-            git pull
             source botenv/bin/activate
+            pkill -f "main.py"
+            git pull
             pip3 install -r requirements.txt --no-cache-dir
             nohup python main.py &
