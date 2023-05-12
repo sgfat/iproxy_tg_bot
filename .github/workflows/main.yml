@@ -27,7 +27,8 @@ jobs:
           script: |
             cd ${{ secrets.PATH }}
             source botenv/bin/activate
-            pkill -f "main.py"
+            pid=$(pgrep -f "python main.py")
+            kill "$pid"
             git pull
             pip3 install -r requirements.txt --no-cache-dir
             nohup python main.py &
