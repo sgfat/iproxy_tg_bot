@@ -22,11 +22,12 @@ jobs:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USERNAME }}
           password: ${{ secrets.PASSWORD }}
+          passphrase: ${{ secrets.PASSPHRASE }}
           port: ${{ secrets.PORT }}
           script: |
             cd ${{ secrets.PATH }}
             pkill -f "python main.py"
             git pull
-            source /botenv/bin/activate
+            source botenv/bin/activate
             pip3 install -r requirements.txt --no-cache-dir
             nohup python main.py &
