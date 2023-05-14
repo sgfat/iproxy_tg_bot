@@ -170,7 +170,7 @@ async def main():
                 message = f'Error in program: {error}'
                 await send_message(bot, message)
             finally:
-                await send_message(bot, 'All checked', silent=True)
+                # await send_message(bot, 'All checked', silent=True)
                 logger.debug('Sleeping')
                 time.sleep(RETRY_PERIOD)
 
