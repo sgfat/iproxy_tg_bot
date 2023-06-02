@@ -2,7 +2,6 @@ import asyncio
 import logging
 import os
 import sys
-import time
 from http import HTTPStatus
 from logging.handlers import RotatingFileHandler
 from typing import Dict, List
@@ -10,9 +9,12 @@ from typing import Dict, List
 import requests
 import telegram
 import telegram.error
+from telegram import KeyboardButton, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram.ext import Updater, CommandHandler, CallbackContext, Application, ContextTypes, ApplicationBuilder, \
+    CallbackQueryHandler
 from dotenv import load_dotenv
 
-from exceptions import NoAPIAnswerError, BotSendMessageError
+from exceptions import NoAPIAnswerError, BotSendMessageError, JSONError, APIRequestError
 
 load_dotenv()
 
@@ -38,6 +40,7 @@ streamHandler.setFormatter(formatter)
 logger.addHandler(fileHandler)
 logger.addHandler(streamHandler)
 
+interrupt_event = asyncio.Event()
 
 def check_tokens():
     """Checking main tokens."""
@@ -55,16 +58,12 @@ def check_tokens():
     return True
 
 
-async def send_message(bot, message, silent=False):
+async def send_message(bot, message, **kwargs):
     """Send message to Telegram."""
     try:
-        if silent:
-            await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message,
-                                   disable_notification=True)
-        else:
-            await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
+        await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message, **kwargs)
     except telegram.error.TelegramError as error:
-        raise BotSendMessageError(f'Send message failure: {error}')
+        raise BotSendMessageError(f'Send message failure: {error}') from error
     else:
         logger.debug(f'Bot send message: "{message}"')
 
@@ -76,7 +75,7 @@ def get_api_answer():
     try:
         response = requests.get(**requests_params)
     except Exception as error:
-        raise Exception(f'Error with request to API: {error}')
+        raise APIRequestError(f'Error with request to API: {error}') from error
     else:
         if response.status_code != HTTPStatus.OK:
             raise NoAPIAnswerError(
@@ -86,7 +85,7 @@ def get_api_answer():
     try:
         return response.json()
     except Exception as error:
-        raise Exception(f'Error with JSON: {error}')
+        raise JSONError(f'Error with JSON: {error}') from error
 
 
 def check_response(response: Dict[str, List]) -> List:
@@ -130,49 +129,87 @@ def parse_ips(data: List[Dict]) -> Dict:
     return current_ips
 
 
-async def main():
+async def check_devices(update: telegram.Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.debug('check_devices started')
+    last_ips = {}
+    await send_message(context.bot, 'Checking devices started')
+    # await update.message.reply_text('Checking devices started!')
+    while True:
+        try:
+            response = get_api_answer()
+            data = check_response(response)
+
+            if statuses := parse_status(data):
+                await send_message(context.bot, f'Offline devices: {statuses}')
+            else:
+                logger.debug('All devices online')
+
+            current_ips = parse_ips(data)
+            for device_id in current_ips:
+                if current_ips[device_id] is None:
+                    continue
+                if last_ips.get(
+                        device_id, device_id) == current_ips[device_id]:
+                    await send_message(
+                        context.bot, f'IP not changed on device: {device_id}')
+                    logger.debug(f'IP not changed: {device_id}')
+                else:
+                    last_ips[device_id] = current_ips[device_id]
+            logger.debug('IPs checked')
+
+        except BotSendMessageError as error:
+            logger.debug(f'Send message failure: {error}')
+        except Exception as error:
+            logger.error(error)
+            message = f'Error in program: {error}'
+            await send_message(context.bot, message)
+        finally:
+            logger.debug('Sleeping')
+            interrupt_future = asyncio.create_task(interrupt_event.wait())
+            sleep_future = asyncio.sleep(1800)
+            done, pending = await asyncio.wait(
+                [interrupt_future, sleep_future], return_when=asyncio.FIRST_COMPLETED
+            )
+            interrupt_future.cancel()  # Отменить задачу ожидания сигнала прерывания
+
+            if interrupt_future in done:
+                interrupt_event.clear()
+            continue
+
+
+async def start_check_devices(update, context):
+    asyncio.ensure_future(check_devices(update, context))
+    # application = context.bot
+    # asyncio.create_task(check_devices(update, context))
+
+
+async def manual_check(update, context, interrupt_future):
+    interrupt_future.set()
+    logger.debug('Manual command received')
+    await send_message(context.bot, 'Manual command received', disable_notification=True)
+
+
+async def start(update, context):
+    reply_markup = ReplyKeyboardMarkup([
+        [KeyboardButton('/start_check_devices'), KeyboardButton('/manual')]
+    ], input_field_placeholder='Выберите опцию:', one_time_keyboard=True)
+    await update.message.reply_text('Выберите опцию:', reply_markup=reply_markup)
+
+
+def main():
     """Start bot."""
     if not check_tokens():
         sys.exit("Program interrupted! Can't find tokens.")
-    bot = telegram.Bot(token=TELEGRAM_TOKEN)
-    last_ips = {}
+
+    application = Application.builder().token(TELEGRAM_TOKEN).build()
+    application.add_handler(CommandHandler('start', start))
+    application.add_handler(CommandHandler('start_check_devices', start_check_devices))
+    application.add_handler(CommandHandler('manual', manual_check))
+
+    application.run_polling()
+
     logger.debug('Bot started')
-    async with bot:
-        while True:
-            try:
-                response = get_api_answer()
-                data = check_response(response)
 
-                statuses = parse_status(data)
-                if statuses:
-                    await send_message(bot, f'Offline devices: {statuses}')
-                else:
-                    logger.debug('All devices online')
-
-                current_ips = parse_ips(data)
-                for device_id in current_ips:
-                    if current_ips[device_id] is None:
-                        continue
-                    if last_ips.get(
-                            device_id, device_id) == current_ips[device_id]:
-                        await send_message(
-                            bot, f'IP not changed on device: {device_id}')
-                        logger.debug('IP not changed: {c_id}')
-                    else:
-                        last_ips[device_id] = current_ips[device_id]
-                else:
-                    logger.debug('IPs checked')
-
-            except BotSendMessageError as error:
-                logger.debug(f'Send message failure: {error}')
-            except Exception as error:
-                logger.error(error)
-                message = f'Error in program: {error}'
-                await send_message(bot, message)
-            finally:
-                # await send_message(bot, 'All checked', silent=True)
-                logger.debug('Sleeping')
-                time.sleep(RETRY_PERIOD)
 
 
 if __name__ == '__main__':
