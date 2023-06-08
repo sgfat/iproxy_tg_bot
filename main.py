@@ -9,12 +9,12 @@ from typing import Dict, List
 import requests
 import telegram
 import telegram.error
-from telegram import KeyboardButton, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
-from telegram.ext import Updater, CommandHandler, CallbackContext, Application, ContextTypes, ApplicationBuilder, \
-    CallbackQueryHandler
 from dotenv import load_dotenv
+from telegram import KeyboardButton, ReplyKeyboardMarkup, Update
+from telegram.ext import CommandHandler, Application, ContextTypes
 
-from exceptions import NoAPIAnswerError, BotSendMessageError, JSONError, APIRequestError
+from exceptions import (NoAPIAnswerError, BotSendMessageError,
+                        JSONError, APIRequestError)
 
 load_dotenv()
 
@@ -28,21 +28,15 @@ HEADERS = {'Authorization': f'{IPROXY_TOKEN}'}
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-fileHandler = RotatingFileHandler(
-    'main.log', maxBytes=5000000, backupCount=5
-)
-streamHandler = logging.StreamHandler(sys.stdout)
+fileHandler = RotatingFileHandler('main.log', maxBytes=5000000, backupCount=5)
 formatter = logging.Formatter(
     '%(asctime)s, %(levelname)s, %(lineno)d, %(message)s, %(name)s'
 )
 fileHandler.setFormatter(formatter)
-streamHandler.setFormatter(formatter)
 logger.addHandler(fileHandler)
-logger.addHandler(streamHandler)
 
-interrupt_event = asyncio.Event()
 
-def check_tokens():
+def check_tokens() -> bool:
     """Checking main tokens."""
     logger.debug('Checking tokens')
     tokens = {
@@ -58,17 +52,20 @@ def check_tokens():
     return True
 
 
-async def send_message(bot, message, **kwargs):
+async def send_message(bot, message, log=False, **kwargs) -> None:
     """Send message to Telegram."""
     try:
         await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message, **kwargs)
     except telegram.error.TelegramError as error:
         raise BotSendMessageError(f'Send message failure: {error}') from error
     else:
-        logger.debug(f'Bot send message: "{message}"')
+        if not log:
+            logger.debug(f'Bot send message: "{message}"')
+        else:
+            logger.debug('Log lines sent')
 
 
-def get_api_answer():
+def get_api_answer() -> Dict[str, List]:
     """Sending request to API."""
     logger.debug('Sending request to API')
     requests_params = {'url': ENDPOINT, 'headers': HEADERS}
@@ -117,6 +114,15 @@ def parse_status(data: List[Dict]) -> List:
     return devices
 
 
+def parse_devices(data: List[Dict]) -> List:
+    """Parsing devices from response."""
+    logger.debug('Parsing devices')
+    return [
+        f"{item['name']} - {item['description']} ID: {item['id']}"
+        for item in data
+    ]
+
+
 def parse_ips(data: List[Dict]) -> Dict:
     """Parsing ips from response."""
     logger.debug('Parsing ips')
@@ -129,11 +135,12 @@ def parse_ips(data: List[Dict]) -> Dict:
     return current_ips
 
 
-async def check_devices(update: telegram.Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.debug('check_devices started')
-    last_ips = {}
+async def auto_check_devices(update: Update,
+                             context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Auto checking devices function."""
+    logger.debug('Started task: check_devices')
     await send_message(context.bot, 'Checking devices started')
-    # await update.message.reply_text('Checking devices started!')
+    last_ips = {}
     while True:
         try:
             response = get_api_answer()
@@ -161,56 +168,88 @@ async def check_devices(update: telegram.Update, context: ContextTypes.DEFAULT_T
             logger.debug(f'Send message failure: {error}')
         except Exception as error:
             logger.error(error)
-            message = f'Error in program: {error}'
-            await send_message(context.bot, message)
+            await send_message(context.bot, f'Error in program: {error}')
         finally:
             logger.debug('Sleeping')
-            interrupt_future = asyncio.create_task(interrupt_event.wait())
-            sleep_future = asyncio.sleep(1800)
-            done, pending = await asyncio.wait(
-                [interrupt_future, sleep_future], return_when=asyncio.FIRST_COMPLETED
-            )
-            interrupt_future.cancel()  # Отменить задачу ожидания сигнала прерывания
-
-            if interrupt_future in done:
-                interrupt_event.clear()
-            continue
+            await asyncio.sleep(RETRY_PERIOD)
 
 
-async def start_check_devices(update, context):
-    asyncio.ensure_future(check_devices(update, context))
-    # application = context.bot
-    # asyncio.create_task(check_devices(update, context))
+async def start_checking(update: Update,
+                         context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Starting task auto_check_devices. Command format: /start_checking"""
+    asyncio.ensure_future(auto_check_devices(update, context))
 
 
-async def manual_check(update, context, interrupt_future):
-    interrupt_future.set()
+async def manual_check(update: Update,
+                       context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Manual request. Command format: /check_online"""
     logger.debug('Manual command received')
-    await send_message(context.bot, 'Manual command received', disable_notification=True)
+    try:
+        manual_response = get_api_answer()
+        manual_data = check_response(manual_response)
+        manual_devices = parse_devices(manual_data)
+        devices_list = '\n'.join(manual_devices)
+        if manual_statuses := parse_status(manual_data):
+            await send_message(context.bot,
+                               f'Offline devices: {manual_statuses}')
+        else:
+            await send_message(context.bot, 'All devices online')
+        await send_message(context.bot,
+                           f'Active devices:\n{devices_list}',
+                           log=True)
+    except Exception as error:
+        logger.error(error)
+        await send_message(context.bot, f'Error in program: {error}')
 
 
-async def start(update, context):
-    reply_markup = ReplyKeyboardMarkup([
-        [KeyboardButton('/start_check_devices'), KeyboardButton('/manual')]
-    ], input_field_placeholder='Выберите опцию:', one_time_keyboard=True)
-    await update.message.reply_text('Выберите опцию:', reply_markup=reply_markup)
+async def request_log(update: Update,
+                      context: ContextTypes.DEFAULT_TYPE,
+                      lines=10) -> None:
+    """Send last lines of log file. Command format: /log <lines>"""
+    log_file = 'main.log'
+    if context.args:
+        lines = int(context.args[0])
+    logger.debug(f'Requested {lines} log lines')
+    try:
+        if not os.path.exists(log_file):
+            await send_message(context.bot, 'Log file not found')
+            return
+        with open(log_file, 'r') as file:
+            log_lines = file.readlines()
+            last_lines = log_lines[-lines:]
+            log_text = '\n'.join(l.strip() for l in last_lines if l.strip())
+        await send_message(context.bot,
+                           f'Last {lines} log records:\n{log_text}',
+                           log=True)
+    except Exception as error:
+        logger.error(error)
+        await send_message(context.bot, f'Error in program: {error}')
 
 
-def main():
-    """Start bot."""
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    reply_markup = ReplyKeyboardMarkup([[
+        KeyboardButton('/start_checking'),
+        KeyboardButton('/manual_check'),
+        KeyboardButton('/request_log')
+    ]], input_field_placeholder='Choose command:', resize_keyboard=True)
+    await update.message.reply_text('Choose command:', reply_markup=reply_markup)
+
+
+def main() -> None:
+    """Main function for start bot."""
     if not check_tokens():
         sys.exit("Program interrupted! Can't find tokens.")
 
     application = Application.builder().token(TELEGRAM_TOKEN).build()
+
     application.add_handler(CommandHandler('start', start))
-    application.add_handler(CommandHandler('start_check_devices', start_check_devices))
-    application.add_handler(CommandHandler('manual', manual_check))
+    application.add_handler(CommandHandler('start_checking', start_checking))
+    application.add_handler(CommandHandler('manual_check', manual_check))
+    application.add_handler(CommandHandler('request_log', request_log))
+    logger.debug('Bot started')
 
     application.run_polling()
 
-    logger.debug('Bot started')
-
-
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    main()

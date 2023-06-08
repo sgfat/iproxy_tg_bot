@@ -146,3 +146,4 @@ dmypy.json
 .mypy_cache
 sample.json
 main.log
+test.py
