@@ -28,12 +28,15 @@ HEADERS = {'Authorization': f'{IPROXY_TOKEN}'}
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+stream_handler = logging.StreamHandler(sys.stdout)
 fileHandler = RotatingFileHandler('main.log', maxBytes=5000000, backupCount=5)
 formatter = logging.Formatter(
     '%(asctime)s, %(levelname)s, %(lineno)d, %(message)s, %(name)s'
 )
 fileHandler.setFormatter(formatter)
+stream_handler.setFormatter(formatter)
 logger.addHandler(fileHandler)
+logger.addHandler(stream_handler)
 
 
 def check_tokens() -> bool:
