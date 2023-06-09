@@ -17,7 +17,7 @@ jobs:
         run: sudo apt-get install openssh-client
 
       - name: Create SSH key file
-        run: echo "${{ secrets.SSH_KEY }}" > ${{ runner.temp }}/id_rsa && chmod 400 ${{ runner.temp }}/id_rsa
+        run: echo "${{ secrets.SSH_KEY }}" > ${{ runner.temp }}/id_rsa && chmod 600 ${{ runner.temp }}/id_rsa
 
       - name: SSH Deploy
         uses: appleboy/ssh-action@master
