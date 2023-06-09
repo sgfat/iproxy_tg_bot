@@ -17,14 +17,14 @@ jobs:
         run: sudo apt-get install openssh-client
 
       - name: Create SSH key file
-        run: echo "${{ secrets.SSH_KEY }}" > ${{ runner.temp }}/id_rsa && chmod 600 ${{ runner.temp }}/id_rsa
+        run: echo "${{ secrets.SSH_KEY }}" > ${{ runner.temp }}/mac && chmod 400 ${{ runner.temp }}/mac
 
       - name: SSH Deploy
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USERNAME }}
-          key: ${{ runner.temp }}/id_rsa
+          key: ${{ runner.temp }}/mac
           passphrase: ${{ secrets.SSH_PASSPHRASE }}
           port: ${{ secrets.PORT }}
           script: |
