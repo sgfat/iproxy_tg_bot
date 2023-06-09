@@ -16,21 +16,23 @@ jobs:
       - name: Install SSH client
         run: sudo apt-get install openssh-client
 
+      - name: Configure SSH
+        run: echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_rsa && chmod 400 ~/.ssh/id_rsa
+
+      - name: Add SSH fingerprint to known_hosts
+        run: ssh-keyscan -H ${{ secrets.HOST }} >> ~/.ssh/known_hosts
+
       - name: SSH Deploy
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.HOST }}
-          username: ${{ secrets.USERNAME }}
-          key: ${{ secrets.SSH_KEY }}
-          passphrase: ${{ secrets.PASSPHRASE }}
-          port: ${{ secrets.PORT }}
-          script: |
+        run: |
+          ssh -i ~/.ssh/id_rsa ${{ secrets.USERNAME }}@${{ secrets.HOST }} <<EOF
             cd ${{ secrets.PATH }}
             sudo systemctl stop ${{ secrets.SERVICE_NAME }}
             source venv/bin/activate
             git pull
             pip3 install -r requirements.txt
             sudo systemctl start ${{ secrets.SERVICE_NAME }}
+          EOF
+
 
   send_message:
     runs-on: ubuntu-latest
