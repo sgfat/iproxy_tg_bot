@@ -55,17 +55,17 @@ def check_tokens() -> bool:
     return True
 
 
-async def send_message(bot, message, log=False, **kwargs) -> None:
+async def send_message(bot, message, short_log=False, **kwargs) -> None:
     """Send message to Telegram."""
     try:
         await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message, **kwargs)
     except telegram.error.TelegramError as error:
         raise BotSendMessageError(f'Send message failure: {error}') from error
     else:
-        if not log:
+        if not short_log:
             logger.debug(f'Bot send message: "{message}"')
         else:
-            logger.debug('Log lines sent')
+            logger.debug('Bot send message')
 
 
 def get_api_answer() -> Dict[str, List]:
@@ -174,19 +174,37 @@ async def auto_check_devices(update: Update,
             await send_message(context.bot, f'Error in program: {error}')
         finally:
             logger.debug('Sleeping')
-            await asyncio.sleep(RETRY_PERIOD)
+            await asyncio.sleep(context.bot_data['retry_period'] * 60)
 
 
 async def start_checking(update: Update,
                          context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Starting task auto_check_devices. Command format: /start_checking"""
-    asyncio.ensure_future(auto_check_devices(update, context))
+    """Starting task auto_check_devices.
+    Command format: /start_checking <retry_period in minutes>"""
+    if context.args:
+        try:
+            context.bot_data['retry_period'] = int(context.args[0])
+        except ValueError:
+            await send_message(context.bot, 'Retry period must be integer!')
+            logger.debug('Retry period must be integer')
+            return
+    else:
+        context.bot_data['retry_period'] = RETRY_PERIOD
+    if 'auto_checking_task' not in context.bot_data:
+        task = asyncio.ensure_future(auto_check_devices(update, context))
+        context.bot_data['auto_checking_task'] = task
+    else:
+        await send_message(context.bot, 'Auto checking is already running.')
+        logger.debug('Auto checking is already running.')
 
 
-async def manual_check(update: Update,
-                       context: ContextTypes.DEFAULT_TYPE) -> None:
+async def status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Manual request. Command format: /check_online"""
     logger.debug('Manual command received')
+    if 'auto_checking_task' in context.bot_data:
+        run_status = f'Running ({context.bot_data["retry_period"]} min)'
+    else:
+        run_status = 'Stopped'
     try:
         manual_response = get_api_answer()
         manual_data = check_response(manual_response)
@@ -198,16 +216,17 @@ async def manual_check(update: Update,
         else:
             await send_message(context.bot, 'All devices online')
         await send_message(context.bot,
-                           f'Active devices:\n{devices_list}',
-                           log=True)
+                           f'Auto checking: {run_status}\n'
+                           f'List of devices:\n{devices_list}',
+                           short_log=True)
     except Exception as error:
         logger.error(error)
         await send_message(context.bot, f'Error in program: {error}')
 
 
-async def request_log(update: Update,
-                      context: ContextTypes.DEFAULT_TYPE,
-                      lines=10) -> None:
+async def log(update: Update,
+              context: ContextTypes.DEFAULT_TYPE,
+              lines=10) -> None:
     """Send last lines of log file. Command format: /log <lines>"""
     log_file = 'main.log'
     if context.args:
@@ -223,19 +242,27 @@ async def request_log(update: Update,
             log_text = '\n'.join(l.strip() for l in last_lines if l.strip())
         await send_message(context.bot,
                            f'Last {lines} log records:\n{log_text}',
-                           log=True)
+                           short_log=True)
     except Exception as error:
         logger.error(error)
         await send_message(context.bot, f'Error in program: {error}')
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Start command handler."""
     reply_markup = ReplyKeyboardMarkup([[
         KeyboardButton('/start_checking'),
-        KeyboardButton('/manual_check'),
-        KeyboardButton('/request_log')
+        KeyboardButton('/status'),
+        KeyboardButton('/log')
     ]], input_field_placeholder='Choose command:', resize_keyboard=True)
     await update.message.reply_text('Choose command:', reply_markup=reply_markup)
+
+
+async def send_startup_message(application: Application) -> None:
+    """Send startup message."""
+    await send_message(application.bot,
+                       f'Bot is ready for work!\nRun command: /start',
+                       short_log=True)
 
 
 def main() -> None:
@@ -247,9 +274,12 @@ def main() -> None:
 
     application.add_handler(CommandHandler('start', start))
     application.add_handler(CommandHandler('start_checking', start_checking))
-    application.add_handler(CommandHandler('manual_check', manual_check))
-    application.add_handler(CommandHandler('request_log', request_log))
+    application.add_handler(CommandHandler('status', status))
+    application.add_handler(CommandHandler('log', log))
     logger.debug('Bot started')
+
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(send_startup_message(application))
 
     application.run_polling()
 
