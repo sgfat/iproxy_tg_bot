@@ -16,25 +16,25 @@ jobs:
       - name: Install SSH client
         run: sudo apt-get install openssh-client
 
-      - name: Create SSH key file
-        run: echo "${{ secrets.SSH_KEY }}" > ${{ runner.temp }}/mac && chmod 400 ${{ runner.temp }}/mac
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/mac.pem
+          chmod 400 ~/.ssh/mac.pem
+
+      - name: Add SSH fingerprint to known_hosts
+        run: ssh-keyscan -H ${{ secrets.HOST }} >> ~/.ssh/known_hosts
 
       - name: SSH Deploy
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.HOST }}
-          username: ${{ secrets.USERNAME }}
-          key: ${{ runner.temp }}/mac
-          passphrase: ${{ secrets.SSH_PASSPHRASE }}
-          port: ${{ secrets.PORT }}
-          script: |
+        run: |
+          ssh -i ~/.ssh/mac.pem ${{ secrets.USERNAME }}@${{ secrets.HOST }} <<EOF
             cd ${{ secrets.PATH }}
             sudo systemctl stop ${{ secrets.SERVICE_NAME }}
             source venv/bin/activate
             git pull
             pip3 install -r requirements.txt
             sudo systemctl start ${{ secrets.SERVICE_NAME }}
-
+          EOF
 
 
   send_message:
