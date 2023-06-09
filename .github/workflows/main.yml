@@ -27,7 +27,7 @@ jobs:
 
       - name: SSH Deploy
         run: |
-          ssh -i ~/.ssh/id_rsa ${{ secrets.USERNAME }}@${{ secrets.HOST }} <<EOF
+          ssh -i ~/.ssh/id_rsa -p ${{ secrets.PORT }} ${{ secrets.USERNAME }}@${{ secrets.HOST }} <<EOF
             cd ${{ secrets.PATH }}
             sudo systemctl stop ${{ secrets.SERVICE_NAME }}
             source venv/bin/activate
