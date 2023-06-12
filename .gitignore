@@ -145,5 +145,6 @@ dmypy.json
 
 .mypy_cache
 sample.json
-main.log
-test.py
+debug.log
+info.log
+data.db
