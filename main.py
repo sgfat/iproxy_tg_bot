@@ -5,7 +5,7 @@ import sys
 from dotenv import load_dotenv
 from telegram.ext import CommandHandler, Application
 
-from commands import status, start_check_devices, start, send_startup_message, log, start_check_rotation
+from commands import status, start_check_devices, start, send_startup_message, log, start_check_rotation, stop_check
 from settings import logger, info_logger
 
 load_dotenv()
@@ -42,6 +42,7 @@ def main() -> None:
 
     application = Application.builder().token(TELEGRAM_TOKEN).build()
     application.add_handler(CommandHandler('start', start))
+    application.add_handler(CommandHandler('stop_check', stop_check))
     application.add_handler(CommandHandler('start_check_devices', start_check_devices))
     application.add_handler(CommandHandler('start_check_rotation', start_check_rotation))
     application.add_handler(CommandHandler('status', status))

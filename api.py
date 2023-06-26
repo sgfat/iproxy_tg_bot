@@ -87,21 +87,24 @@ def parse_status(data: Dict[str, Dict]) -> str:
             logger.error(f'No key "online" in value: {key}')
             continue
         if not online:
-            offline_list.append(f'{value["name"]} - {value["description"]}')
+            if value["description"]:
+                offline_list.append(f'{value["name"]} - {value["description"]}')
+            else:
+                offline_list.append(f'{value["name"]} - no description')
     return ', '.join(offline_list)
 
 
 def parse_devices(data: Dict[str, Dict]) -> List:
     """
-    Parsing devices from response.
+    Parsing devices data from response.
     """
     logger.debug('Parsing devices')
     return [
-        f"{value['name']} - {value['description']} - {key}"
+        f'{"🟢" if value["online"] else "🔴"} - {value["name"]} {value["description"] or ""} - id: {key}'
         for key, value in data.items()
     ]
 
-# TODO Проверить что время обновления меньше
+
 def parse_ips(data: Dict[str, Dict]) -> Dict:
     """
     Parsing ips from response.
