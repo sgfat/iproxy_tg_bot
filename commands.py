@@ -59,10 +59,11 @@ async def check_rotation(update: Update,
     """
     Auto checking rotation function task.
     """
-    logger.debug('Started task: auto_check_rotation')
+    logger.debug('Started task: check_rotation')
     info_logger.info('Auto checking rotation started')
-    retry_period = context.bot_data.get('retry_check_rotation', RETRY_PERIOD) * 60
+    retry_period = context.bot_data.get('retry_rotation', RETRY_PERIOD) * 60
     last_ips = {}
+    await send_message(context.bot, 'Checking rotation started')
     while True:
         try:
             response = get_api_answer()
