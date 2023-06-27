@@ -197,7 +197,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     else:
         check_devices_task_status = '🛑 stopped'
     if 'check_rotation_task' in context.bot_data:
-        check_rotation_task_status = f'✅ running ({context.bot_data["retry_check_rotation"]} min)'
+        check_rotation_task_status = f'✅ running ({context.bot_data["retry_rotation"]} min)'
     else:
         check_rotation_task_status = '🛑 stopped'
     try:
@@ -205,22 +205,14 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         manual_data = check_response(manual_response)
         manual_devices = parse_devices(manual_data)
         devices_list = '\n'.join(manual_devices)
-        # if offline_devices := parse_status(manual_data):
-        #     online_status = f'Offline devices: {offline_devices}'
-        # else:
-        #     online_status = 'All devices online'
-        #     info_logger.info('All devices online')
         await send_message(
             context.bot,
-            # f'\`\`\`\n'
             f'<code>'
             f'Registered devices:\n\n'
             f'{devices_list}\n\n'
             f'Auto check online: {check_devices_task_status}\n'
             f'Auto check rotation: {check_rotation_task_status}\n'
             f'</code>',
-            # f'\`\`\`\n',
-            # f'{online_status}',
             short_log=True,
             parse_mode=ParseMode.HTML
         )

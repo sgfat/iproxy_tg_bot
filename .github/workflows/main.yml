@@ -28,8 +28,8 @@ jobs:
       - name: SSH Deploy
         run: |
           ssh -i ~/.ssh/${{ secrets.SSH_FILENAME }} ${{ secrets.USERNAME }}@${{ secrets.HOST }} <<EOF
-            cd ${{ secrets.PATH }}
             sudo systemctl stop ${{ secrets.SERVICE_NAME }}
+            cd ${{ secrets.PATH }}
             git pull
             source ${{ secrets.VENV_PATH }}/bin/activate
             pip3 install -r requirements.txt
