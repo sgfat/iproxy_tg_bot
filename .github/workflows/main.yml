@@ -27,7 +27,7 @@ jobs:
 
       - name: SSH Deploy
         run: |
-          ssh -i ~/.ssh/${{ secrets.SSH_FILENAME }} ${{ secrets.USERNAME }}@${{ secrets.HOST }} <<EOF
+          sshpass -p "${{ secrets.PASSPHRASE }}" ssh -i ~/.ssh/${{ secrets.SSH_FILENAME }} ${{ secrets.USERNAME }}@${{ secrets.HOST }} <<EOF
             sudo systemctl stop ${{ secrets.SERVICE_NAME }}
             cd ${{ secrets.PATH }}
             git pull
