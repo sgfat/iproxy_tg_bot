@@ -13,7 +13,7 @@ LOG_LINES = 10
 ENDPOINT = 'https://api.iproxy.online/v1/connections?with_statuses=1'
 
 # Log format
-LOG_DEBUG_FORMAT = '%(asctime)s, %(levelname)s, line %(lineno)d, %(message)s'
+LOG_DEBUG_FORMAT = '%(asctime)s, %(levelname)s, line %(lineno)d, %(message)s, %(name)s'
 LOG_INFO_FORMAT = '%(asctime)s - %(message)s'
 
 # Log file name
